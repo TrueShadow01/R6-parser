@@ -2,7 +2,7 @@
 
 A Windows tool for browsing Rainbow Six Siege operators and exporting them to Blender.
 
-The desktop UI supports operator search, export and live logs. The 3D preview and Blender add-on are still in development.
+The desktop UI supports operator search, export, live logs, Blender 4.5 add-on installation and opening exported operators in Blender.
 
 ## Setup
 
@@ -68,26 +68,15 @@ Export attempts every primary group-0 model and excludes alternate groups. It st
 
 ## Import into Blender 4.5
 
-Run this in Blender's Python Console, adjusting the paths and operator name:
+1. Close Blender, then click **Install Blender 4.5 add-on** in the UI.
+2. Export an operator.
+3. Click **Open in Blender** to launch a new Blender window with the exported models and material fixes.
 
-```python
-import runpy
-from pathlib import Path
+The standard Blender 4.5 installation path is checked first. If it is missing, a file picker lets you select `blender.exe`. Other Blender versions are rejected.
 
-project = Path(r"D:\R6")
-operator = project / "output" / "Caveira"
+You can also import an existing export through Blender's **File → Import → Rainbow Six Siege Operator** menu. Select the operator folder containing `body` and `head`.
 
-siege = runpy.run_path(
-    str(project / "blender_preview.py"),
-    run_name="siege_material_tools",
-)
-
-for part in ("body", "head"):
-    for gltf in sorted((operator / part).glob("*/*.gltf")):
-        siege["import_siege_model"](str(gltf))
-```
-
-This imports geometry and applies the existing material fixes. Do not manually import the same files first, ordinary glTF import does not apply the helper's shaders.
+The UI confirms that Blender launched, import errors appear in Blender's system console.
 
 ## Known limitations
 
@@ -95,7 +84,7 @@ This imports geometry and applies the existing material fixes. Do not manually i
 - Caveira and Ace received visual checks, other operators may have material or attachment issues.
 - Export supports LOD0 glTF. Complete skeleton hierarchy, animations and GLB export are unavailable.
 - Shaders approximate the game appearance. Streamed textures and several material effects remain incomplete.
-- The UI's 3D preview, material inspector, automatic indexing, batch resume and Blender add-on installation are not implemented yet.
+- The UI's 3D preview, material inspector, automatic indexing and batch resume are not implemented yet. Export history and the selected Blender path are remembered only for the current UI session.
 
 ## CLI and tests
 
@@ -111,9 +100,9 @@ Use `<command> -h` for command-specific options. Tests use synthetic data and do
 
 ## Next steps
 
-1. Blender 4.5 add-on installation and an **Open in Blender** action.
-2. Packaged alpha with a validated setup/export/import workflow.
-3. Interactive 3D preview and material/texture inspection.
+1. Save the Blender executable path and expose it in the UI.
+2. Package the alpha and validate the complete setup/export/import workflow.
+3. Add interactive 3D preview and material/texture inspection.
 
 ## License and third-party assets
 

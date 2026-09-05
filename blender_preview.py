@@ -176,6 +176,8 @@ def apply_siege_materials(gltf_path: Path, *, materials=None) -> None:
 
         packed_filename = extras.get("siegePackedMaterialTexture")
 
+        # node crackheads were on it again lol - Isaac
+        # incredible crackheads, true - shadow
         if principled is not None and packed_filename is not None:
             packed_path = gltf_path.parent / packed_filename
 

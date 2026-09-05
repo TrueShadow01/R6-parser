@@ -1,5 +1,7 @@
 """Resolve Siege material slots to compiled texture assets"""
 
+# good job Isaac, try to prevent Blake from fucking some stuff up when he does the shaders, new season just fucked up some offsets (mainly material/texture ones)
+
 from __future__ import annotations
 from dataclasses import dataclass, replace
 

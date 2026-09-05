@@ -1,7 +1,13 @@
 """Basic Desktop UI for browsing default operator registry entries"""
 
+# Tell Blake to do some reverse engineering of the shaders, some are still fucked, need some for 3d prev. -Victor
+# ^ He is gonna do it in a bit Victor, could have wrote him that tho - shadow
+
+# Thx for the open in blender ui shit nyx - shadow
+
 import sys
 import codecs
+import re
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, Signal, QProcess
@@ -34,6 +40,10 @@ class MainWindow(QMainWindow):
         self.worker = None
         self.export_process = None
         self.registry_game_path = None
+        self.complete_exports = {}
+        self.blender_path = Path(r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe")
+        # hard coding paths? - shadow
+        # install_blender_addon / open_in_blender open file pickers if the path is shit - aiden
         self.close_requested = False
         self.setWindowTitle("R6 Forge Extractor - Alpha")
         self.resize(1250, 780)
@@ -58,6 +68,8 @@ class MainWindow(QMainWindow):
         self.export_button.clicked.connect(self.export_selected)
         self.install_button = QPushButton("Install Blender 4.5 add-on")
         self.install_button.clicked.connect(self.install_blender_addon)
+        self.open_button = QPushButton("Open in Blender")
+        self.open_button.clicked.connect(self.open_in_blender)
 
         toolbar = QHBoxLayout()
         toolbar.addWidget(QLabel("Game Folder"))
@@ -66,6 +78,7 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.load)
         toolbar.addWidget(self.export_button)
         toolbar.addWidget(self.install_button)
+        toolbar.addWidget(self.open_button)
         layout.addLayout(toolbar)
 
         self.search = QLineEdit()
@@ -126,6 +139,7 @@ class MainWindow(QMainWindow):
         self.game_path.setEnabled(False)
         self.export_button.setEnabled(False)
         self.install_button.setEnabled(False)
+        self.open_button.setEnabled(False)
         self.statusBar().showMessage("Reading operator registry...")
         self.log.appendPlainText(f"Reading {archive}")
 
@@ -158,6 +172,7 @@ class MainWindow(QMainWindow):
         self.game_path.setEnabled(True)
         self.export_button.setEnabled(True)
         self.install_button.setEnabled(True)
+        self.open_button.setEnabled(True)
 
         if self.close_requested:
             self.close()
@@ -237,11 +252,18 @@ class MainWindow(QMainWindow):
         ).strip().rstrip(".")
         if not folder_name:
             self.report_error("Operator name cannot form an export folder.")
+            return # you forgot the nyx, no folder name = no can do - shadow
         self.export_directory = Path(folder) / folder_name
         self.export_jobs = [
             (label, uid, self.export_directory / label / f"{uid:016X}")
             for label, uid in parts
         ]
+        self.export_operator_uid = operator.uid
+        self.complete_exports.pop(operator.uid, None)
+        self.export_model_files = tuple(
+            destination / f"{uid:016X}.gltf"
+            for _, uid, destination in self.export_jobs
+        )
         self.export_total = len(self.export_jobs)
         self.export_arguments = [
             "-u", "-B", "-X", "utf8", str(project / "main.py"),
@@ -263,7 +285,7 @@ class MainWindow(QMainWindow):
         self.start_export_part()
 
     def set_export_busy(self, busy):
-        for widget in (self.export_button, self.install_button, self.load, self.browse, self.game_path, self.operators, self.search):
+        for widget in (self.export_button, self.install_button, self.open_button, self.load, self.browse, self.game_path, self.operators, self.search):
             widget.setEnabled(not busy)
 
     def start_export_part(self):
@@ -303,6 +325,7 @@ class MainWindow(QMainWindow):
         elif self.export_jobs:
             self.start_export_part()
         else:
+            self.complete_exports[self.export_operator_uid] = self.export_model_files
             self.finish_export(True, f"Primary head/body export complete: {self.export_directory}")
 
     def export_process_error(self, error):
@@ -338,6 +361,7 @@ class MainWindow(QMainWindow):
             if not filename:
                 return
             blender = Path(filename)
+        self.blender_path = blender
 
         script = Path(__file__).resolve().parent / "install_blender_addon.py"
         if not script.is_file():
@@ -374,6 +398,73 @@ class MainWindow(QMainWindow):
         success = exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0
         message = "R6 add-on installed and enabled in Blender 4.5" if success else f"Blender installation failed (exit {exit_code}), see log"
         self.finish_export(success, message)
+
+    def open_in_blender(self):
+        if self.worker is not None or self.export_process is not None:
+            return
+
+        item = self.operators.currentItem()
+        if item is None:
+            self.report_error("Select an exported operator first") # duh
+            return
+
+        operator = item.data(Qt.ItemDataRole.UserRole)
+        models = self.complete_exports.get(operator.uid)
+        if not models or any(not path.is_file() for path in models):
+            self.report_error("Export this operator successfully first.")
+            return
+
+        blender = self.blender_path
+        if not blender.is_file():
+            filename, _ = QFileDialog.getOpenFileName(self, "Choose Blender 4.5", "", "Blender executable (blender.exe)")
+            if not filename:
+                return
+            blender = Path(filename)
+
+        script = Path(__file__).resolve().parent / "open_operator_blender.py"
+        if not script.is_file():
+            self.report_error(f"Launch script not found: {script}")
+            return
+
+        self.blender_path = blender
+        self.blender_launch_script = script
+        self.blender_launch_models = models
+        self.blender_version_output = bytearray()
+
+        self.export_process = QProcess(self)
+        self.export_process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        self.export_process.readyReadStandardOutput.connect(self.read_blender_version)
+        self.export_process.finished.connect(self.blender_version_finished)
+        self.export_process.errorOccurred.connect(self.export_process_error)
+        self.set_export_busy(True)
+        self.statusBar().showMessage("Checking Blender version...")
+        self.export_process.start(str(blender), ["--version"])
+
+    def read_blender_version(self):
+        if self.export_process is not None:
+            self.blender_version_output.extend(bytes(self.export_process.readAllStandardOutput()))
+
+    def blender_version_finished(self, exit_code, exit_status):
+        if self.export_process is None:
+            return
+
+        self.read_blender_version()
+        output = self.blender_version_output.decode("utf-8", errors="replace")
+        match = re.search(r"^Blender (\d+)\.(\d+)\.", output, re.MULTILINE)
+        valid = exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0 and match is not None and match.groups() == ("4", "5")
+        if not valid:
+            self.finish_export(False, "Select Blender 4.5 to open ths operator")
+            return
+
+        arguments = [
+            "--factory-startup",
+            "--addons", "io_scene_r6",
+            "--python", str(self.blender_launch_script),
+            "--",
+            *[str(path) for path in self.blender_launch_models],
+        ]
+        started, _ = QProcess.startDetached(str(self.blender_path), arguments, str(self.blender_launch_script.parent))
+        self.finish_export(started, "Blender launched, check the new window for the imported operator." if started else "Could not launch Blender.")
 
     def closeEvent(self, event):
         if self.worker is not None or self.export_process is not None:

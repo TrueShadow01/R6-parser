@@ -1,5 +1,9 @@
 """Composite model resolution and export"""
 
+# Yo Isaac some Poses are off for later operators + some materials are fucked still, like usual
+# Ash throws a error for not detecting a compiled mesh obj, tell Aiden to look into it, maybe some hex got fucked with the new season that i didnt check
+# - shadow
+
 from __future__ import annotations
 
 import struct
@@ -38,6 +42,8 @@ from src.parser import (
 )
 from src.texture import save_png
 
+# Fuck me, I hate this - Aiden
+# Brother what - Shadow
 COMPILED_MESH_OBJ = 0xABEB2DFB
 
 TEXTURE_TYPES = {

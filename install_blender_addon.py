@@ -42,6 +42,7 @@ def install(blender):
             for destination, source in sources.items():
                 package.write(source, destination)
 
+        # "only god knows what this does type shit" - Aiden
         expression = f"""
 import bpy
 import addon_utils

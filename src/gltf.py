@@ -1,5 +1,7 @@
 """Minimal dependency free glTF 2.0 writer for Siege models"""
 
+# Yo Nyx, wait for blake to the glass shader done and implement it into here tho and help him to not go insane lol - Shadow
+
 from __future__ import annotations
 
 from PIL import Image
