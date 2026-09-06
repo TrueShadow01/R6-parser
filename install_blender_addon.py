@@ -1,18 +1,18 @@
 """Build and install the R6 add-on into Blender 4.5"""
 
 import re
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
+from app_runtime import run_external
 
 def install(blender):
     blender = Path(blender).resolve()
     if not blender.is_file():
         raise FileNotFoundError(blender)
 
-    version = subprocess.run(
+    version = run_external(
         [str(blender), "--version"],
         capture_output=True,
         text=True,
@@ -73,7 +73,7 @@ if "FINISHED" not in result:
 print("R6 add-on installed and enabled:", sys.modules[module].__file__)
 """
         print("Installing the current R6 add-on and material helper...", flush=True)
-        subprocess.run(
+        run_external(
             [
                 str(blender),
                 "--background",

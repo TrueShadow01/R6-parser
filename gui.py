@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.operator_registry import read_operator_registry
+from app_runtime import worker_arguments, external_program_environment
 
 class RegistryLoader(QThread):
     loaded = Signal(object)
@@ -303,7 +304,6 @@ class MainWindow(QMainWindow):
         )
         self.export_total = len(self.export_jobs)
         self.export_arguments = [
-            "-u", "-B", "-X", "utf8", str(project / "main.py"),
             "model", str(archive),
             "--depgraph", str(depgraph),
             "--database", str(database)
@@ -337,7 +337,14 @@ class MainWindow(QMainWindow):
         self.export_decoder = codecs.getincrementaldecoder("utf-8")("replace")
 
         self.statusBar().showMessage(f"Exporting {number}/{self.export_total}: {label} {uid:016X}")
-        self.export_process.start(sys.executable, self.export_arguments + ["--uid", f"{uid:016X}", "-o", str(destination)],)
+        self.export_process.start(sys.executable, worker_arguments(
+            "cli",
+            self.export_arguments + [
+                    "--uid",
+                    f"{uid:016X}", "-o", str(destination)
+                ],
+            ),
+        )
 
     def read_export_output(self):
         if self.export_process is None:
@@ -421,7 +428,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Installing Blender 4.5 add-on...")
         self.export_process.start(
             sys.executable,
-            ["-u", "-B", "-X", "utf8", str(script), str(blender)]
+            worker_arguments("install", [str(blender)]),
         )
 
     def blender_install_finished(self, exit_code, exit_status):
@@ -474,7 +481,8 @@ class MainWindow(QMainWindow):
         self.export_process.errorOccurred.connect(self.export_process_error)
         self.set_export_busy(True)
         self.statusBar().showMessage("Checking Blender version...")
-        self.export_process.start(str(blender), ["--version"])
+        with external_program_environment():
+            self.export_process.start(str(blender), ["--version"])
 
     def read_blender_version(self):
         if self.export_process is not None:
@@ -499,7 +507,8 @@ class MainWindow(QMainWindow):
             "--",
             *[str(path) for path in self.blender_launch_models],
         ]
-        started, _ = QProcess.startDetached(str(self.blender_path), arguments, str(self.blender_launch_script.parent))
+        with external_program_environment():
+            started, _ = QProcess.startDetached(str(self.blender_path), arguments, str(self.blender_launch_script.parent))
         self.finish_export(started, "Blender launched, check the new window for the imported operator." if started else "Could not launch Blender.")
 
     def build_asset_index(self):
@@ -533,11 +542,10 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Indexing game archives...")
         self.export_process.start(
             sys.executable,
-            [
-                "-u", "-B", "-X", "utf8", str(script),
-                "index", str(game),
-                "-o", str(self.index_database),
-            ],
+            worker_arguments(
+                "cli",
+                ["index", str(game), "-o", str(self.index_database)]
+            ),
         )
 
     def asset_index_finished(self, exit_code, exit_status):
