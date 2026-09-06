@@ -68,7 +68,7 @@ def map_archive(path: str | Path) -> Iterator[mmap.mmap]:
             yield data
 
 def iter_container_offsets(data, start: int = 0) -> Iterator[int]:
-    """Find every current Siege container signature"""
+    """Find containers without scanning inside validated payloads"""
 
     offset = max(0, start)
 
@@ -78,8 +78,16 @@ def iter_container_offsets(data, start: int = 0) -> Iterator[int]:
         if offset < 0:
             return
 
+        try:
+            container = parse_container(data, offset)
+        except ForgeFormatError:
+            # let callers report the invalid candidate, keep searching after
+            next_offset = offset + len(CONTAINER_MAGIC)
+        else:
+            next_offset = container.end_offset
+
         yield offset
-        offset += len(CONTAINER_MAGIC)
+        offset = next_offset
 
 def parse_container(data, offset: int) -> ContainerInfo:
     """Parse and bounds check a container without decompressing it"""
