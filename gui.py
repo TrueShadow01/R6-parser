@@ -63,6 +63,8 @@ class MainWindow(QMainWindow):
         self.browse.clicked.connect(self.choose_folder)
         self.load = QPushButton("Load operators")
         self.load.clicked.connect(self.load_registry)
+        self.index_button = QPushButton("Build / Update Asset Index")
+        self.index_button.clicked.connect(self.build_asset_index)
         self.export_button = QPushButton("Export selected operator")
         self.export_button.clicked.connect(self.export_selected)
         self.install_button = QPushButton("Install Blender 4.5 add-on")
@@ -75,6 +77,7 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.game_path, 1)
         toolbar.addWidget(self.browse)
         toolbar.addWidget(self.load)
+        toolbar.addWidget(self.index_button)
         toolbar.addWidget(self.export_button)
         toolbar.addWidget(self.install_button)
         toolbar.addWidget(self.open_button)
@@ -128,7 +131,7 @@ class MainWindow(QMainWindow):
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumHeight(140)
-        self.log.document().setMaximumBlockCount(500)
+        self.log.document().setMaximumBlockCount(5000)
         layout.addWidget(self.log)
 
         self.statusBar().showMessage("Choose the game folder and load operators.")
@@ -171,6 +174,7 @@ class MainWindow(QMainWindow):
         self.export_button.setEnabled(False)
         self.install_button.setEnabled(False)
         self.open_button.setEnabled(False)
+        self.index_button.setEnabled(False)
         self.statusBar().showMessage("Reading operator registry...")
         self.log.appendPlainText(f"Reading {archive}")
 
@@ -204,6 +208,7 @@ class MainWindow(QMainWindow):
         self.export_button.setEnabled(True)
         self.install_button.setEnabled(True)
         self.open_button.setEnabled(True)
+        self.index_button.setEnabled(True)
 
         if self.close_requested:
             self.close()
@@ -317,7 +322,12 @@ class MainWindow(QMainWindow):
         self.start_export_part()
 
     def set_export_busy(self, busy):
-        for widget in (self.export_button, self.install_button, self.open_button, self.load, self.browse, self.game_path, self.operators, self.search, self.blender_edit, self.blender_browse):
+        for widget in (
+            self.export_button, self.install_button, self.open_button,
+            self.index_button, self.load, self.browse, self.game_path,
+            self.operators, self.search,
+            self.blender_edit, self.blender_browse
+        ):
             widget.setEnabled(not busy)
 
     def start_export_part(self):
@@ -491,6 +501,61 @@ class MainWindow(QMainWindow):
         ]
         started, _ = QProcess.startDetached(str(self.blender_path), arguments, str(self.blender_launch_script.parent))
         self.finish_export(started, "Blender launched, check the new window for the imported operator." if started else "Could not launch Blender.")
+
+    def build_asset_index(self):
+        if self.worker is not None or self.export_process is not None:
+            return
+
+        value = self.game_path.text().strip()
+        game = Path(value).resolve()
+        if not value or not (game / "datapc64.forge").is_file():
+            self.report_error("Choose a Siege folder containing datapc64.forge")
+            return
+
+        project = Path(__file__).resolve().parent
+        script = project / "main.py"
+        if not script.is_file():
+            self.report_error(f"CLI not found: {script}")
+            return
+
+        self.index_database = project / "output" / "r6-assets.sqlite"
+        self.export_jobs = []
+        self.export_decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        self.export_process = QProcess(self)
+        self.export_process.setWorkingDirectory(str(project))
+        self.export_process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        self.export_process.readyReadStandardOutput.connect(self.read_export_output)
+        self.export_process.finished.connect(self.asset_index_finished)
+        self.export_process.errorOccurred.connect(self.export_process_error)
+
+        self.set_export_busy(True)
+        self.log.appendPlainText(f"Building/updating asset index from {game}")
+        self.statusBar().showMessage("Indexing game archives...")
+        self.export_process.start(
+            sys.executable,
+            [
+                "-u", "-B", "-X", "utf8", str(script),
+                "index", str(game),
+                "-o", str(self.index_database),
+            ],
+        )
+
+    def asset_index_finished(self, exit_code, exit_status):
+        if self.export_process is None:
+            return
+
+        self.read_export_output()
+        tail = self.export_decoder.decode(b"", final=True)
+        if tail:
+            self.log.moveCursor(QTextCursor.MoveOperation.End)
+            self.log.insertPlainText(tail)
+
+        if exit_status != QProcess.ExitStatus.NormalExit or exit_code != 0:
+            self.finish_export(False, f"Indexing reported errors (exit {exit_code}), see log. The index may be partial.")
+        elif not self.index_database.is_file():
+            self.finish_export(False, "Indexing finished without a database.")
+        else:
+            self.finish_export(True, f"Asset index updated: {self.index_database}")
 
     def closeEvent(self, event):
         if self.worker is not None or self.export_process is not None:
