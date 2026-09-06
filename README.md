@@ -2,110 +2,107 @@
 
 A Windows tool for browsing Rainbow Six Siege operators and exporting them to Blender.
 
-The desktop UI supports operator search, export, live logs, Blender 4.5 add-on installation and opening exported operators in Blender.
+Includes operator search, asset indexing, export, Blender 4.5 add-on installation and direct Blender launch.
 
-## Setup
+![R6 Forge Extractor desktop UI](docs/images/desktop-ui.png)
 
-Requires Windows, 64-bit Python 3.10+, a local Siege installation and a compatible Oodle runtime. Blender 4.5 is the current import validation target.
+*Current alpha interface. The central 3D preview and material/texture inspector are not implemented yet.*
 
-Run commands from the project directory.
+## Standalone setup
 
-### Install dependencies
+Requires 64-bit Windows, a local Siege installation, a compatible Oodle runtime ([such as this one](https://drive.google.com/file/d/1Q2Bhz1jmjBFRBzsN0eS1UDMsqgDCpdXl/view?usp=sharing)) and Blender 4.5. Python is not required for the standalone build.
 
-```powershell
-py -3 -m pip install -r requirements-gui.txt
-```
+1. Extract the entire release ZIP into a folder.
+2. Keep `R6ForgeExtractor.exe`, `R6Worker.exe` and `_internal` together.
+3. Configure Oodle as described below.
+4. Launch **R6ForgeExtractor.exe**.
+5. Choose your game folder and Blender 4.5 executable using **Browse**.
 
-For CLI-only use, install `requirements.txt` instead.
+### Oodle
 
-### Configure Oodle
+Supply a compatible `oo2core_*_win64.dll` you are authorized to use. Some games using Oodle include this DLL in their installation folders, you may already have a suitable copy in a game you own. Compatibility is not guaranteed.
 
-Supply a compatible `oo2core_*_win64.dll` you are authorized to use. Some games that use Oodle include this DLL in their installation folders, you may already have a suitable copy in a game you own. Compatibility is not guaranteed.
+Place the DLL beside `R6ForgeExtractor.exe`, or set `R6_OODLE_DLL` to its full path.
 
-Place the DLL beside `main.py`, or point directly to its existing location:
+For example, launch from PowerShell:
 
 ```powershell
 $env:R6_OODLE_DLL = "C:\Path\To\oo2core_8_win64.dll"
+.\R6ForgeExtractor.exe
 ```
-
-Use your runtime's actual filename. This setting applies to the current PowerShell session, launch the extractor from that session or set the R6_OODLE_DLL path in the Windows Enviroment Variables.
 
 Oodle is not bundled. See [RAD's official Oodle page](https://www.radgametools.com/oodle.htm) for product information and evaluation requests.
 
-### Configure the game folder
+## Export and open an operator
 
-Create an ignored `config.py` beside `main.py`:
+1. Click **Build / Update Asset Index**. Repeat after game updates.
+2. Click **Load operators**, then search for and select an operator.
+3. Click **Export selected operator** and choose a destination.
+4. Close Blender and click **Install Blender 4.5 add-on** once or again after updating the importer.
+5. Click **Open in Blender** while selecting the exported operator.
 
-```python
-GAME_DIR = r"D:\Path\To\Tom Clancy's Rainbow Six Siege"
-```
-
-Build the asset index:
-
-```powershell
-py -3 -B main.py index --all -o output/r6-assets.sqlite
-```
-
-Run indexing again after game updates. Registry browsing alone does not require an index.
-
-## Export an operator
-
-```powershell
-py -3 -B gui.py
-```
-
-Choose the game folder, click **Load operators**, select an operator and click **Export selected operator**.
-
-The UI reads `datapc64.forge`. Export also requires `datapc64_merged_bnk_mesh.forge`, `datapc64_ondemand.depgraphbin` and the project's `output/r6-assets.sqlite` index for that installation.
-
-Files are saved under:
+Exports use:
 
 ```text
 <destination>/<operator-name>/<body-or-head>/<model-UID>/
 ```
 
-Export attempts every primary group-0 model and excludes alternate groups. It stops on the first failure and keeps completed files. Closing the window waits for the export queue to finish.
+The UI remembers paths and successful exports across restarts. Moving or deleting exported files invalidates their saved paths.
 
-## Import into Blender 4.5
+Export attempts every primary group-0 model and excludes alternate groups. It stops on the first failure and retains completed files. Closing the UI waits for the active indexing, export or installation operation to finish.
 
-1. Close Blender, then click **Install Blender 4.5 add-on** in the UI.
-2. Export an operator.
-3. Click **Open in Blender** to launch a new Blender window with the exported models and material fixes.
+The asset database is stored in `output/r6-assets.sqlite` beside the executables. Registry browsing does not require the database.
 
-The standard Blender 4.5 installation path is checked first. If it is missing, a file picker lets you select `blender.exe`. Other Blender versions are rejected.
+## Blender import
 
-You can also import an existing export through Blender's **File → Import → Rainbow Six Siege Operator** menu. Select the operator folder containing `body` and `head`.
+The add-on imports geometry and applies the existing material fixes. Ordinary glTF import does not apply the helper's shaders.
 
-The UI confirms that Blender launched, import errors appear in Blender's system console.
+To import an existing export manually, use **File → Import → Rainbow Six Siege Operator** in Blender. Select the operator folder containing `body` and `head`.
+
+Blender 4.5 is required by this alpha. The UI confirms that Blender launched, import errors appear in Blender's system console.
 
 ## Known limitations
 
 - Registry discovery was checked against an installation containing 78 operators. Game updates may require parser changes.
-- Caveira and Ace received visual checks, other operators may have material or attachment issues.
+- Caveira and Ace received visual checks. Other operators may have material or attachment issues.
 - Export supports LOD0 glTF. Complete skeleton hierarchy, animations and GLB export are unavailable.
 - Shaders approximate the game appearance. Streamed textures and several material effects remain incomplete.
-- The UI's 3D preview, material inspector, automatic indexing and batch resume are not implemented yet. Export history and the selected Blender path are remembered only for the current UI session.
+- Interactive 3D preview, material inspection, cancellation and batch export resume are not available yet.
 
-## CLI and tests
+## Running from source
 
-The CLI also supports archive scanning, resumable raw extraction, asset indexing, catalogs and model discovery:
+Requires 64-bit Python 3.10 or newer. Run from the project directory:
+
+```powershell
+py -3 -m pip install -r requirements-gui.txt
+py -3 -B app.py
+```
+
+For source execution, place Oodle beside `main.py` or use `R6_OODLE_DLL`.
+
+The CLI also supports archive scanning, resumable raw extraction, catalogs and model discovery:
 
 ```powershell
 py -3 -B main.py -h
-py -3 -B main.py operators --registry
 py -3 -B -m unittest discover -s tests -v
 ```
 
-Use `<command> -h` for command-specific options. Tests use synthetic data and do not require game assets or Oodle.
+The standalone CLI is available through:
+
+```powershell
+.\R6Worker.exe --worker cli -h
+```
+
+Tests use synthetic data and do not require game assets or Oodle.
 
 ## Next steps
 
-1. Save the Blender executable path and expose it in the UI.
-2. Package the alpha and validate the complete setup/export/import workflow.
-3. Add interactive 3D preview and material/texture inspection.
+1. Interactive 3D preview and material/texture inspection.
+2. Broader operator and shader validation.
+3. Cancellation and resumable batch exports.
 
 ## License and third-party assets
 
-See [LICENSE](LICENSE) for the project license.
+See [LICENSE](LICENSE) for the project license. Bundled dependencies retain their respective licenses.
 
 Rainbow Six Siege and its assets belong to Ubisoft. Game assets and the proprietary Oodle runtime are not included or covered by this project's license.

@@ -80,3 +80,10 @@ collection = COLLECT(
 
 for filename in ("README.md", "LICENSE"):
     shutil.copy2(project / filename, Path(collection.name) / filename)
+
+image_directory = Path(collection.name) / "docs" / "images"
+image_directory.mkdir(parents=True, exist_ok=True)
+shutil.copy2(
+    project / "docs" / "images" / "desktop-ui.png",
+    image_directory / "desktop-ui.png",
+)
