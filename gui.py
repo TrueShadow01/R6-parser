@@ -1,16 +1,13 @@
 """Basic Desktop UI for browsing default operator registry entries"""
 
 # Tell Blake to do some reverse engineering of the shaders, some are still fucked, need some for 3d prev. -Victor
-# ^ He is gonna do it in a bit Victor, could have wrote him that tho - shadow
-
-# Thx for the open in blender ui shit nyx - shadow
 
 import sys
 import codecs
 import re
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal, QProcess
+from PySide6.QtCore import Qt, QThread, Signal, QProcess, QSettings
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QFileDialog, QLabel, QLineEdit, QListWidget,
@@ -37,13 +34,12 @@ class RegistryLoader(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.settings = QSettings("R6ForgeExtractor", "Desktop")
         self.worker = None
         self.export_process = None
         self.registry_game_path = None
         self.complete_exports = {}
         self.blender_path = Path(r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe")
-        # hard coding paths? - shadow
-        # install_blender_addon / open_in_blender open file pickers if the path is shit - aiden
         self.close_requested = False
         self.setWindowTitle("R6 Forge Extractor - Alpha")
         self.resize(1250, 780)
@@ -59,6 +55,9 @@ class MainWindow(QMainWindow):
             self.game_path.setText(str(GAME_DIR))
         except ImportError:
             pass
+
+        self.game_path.setText(self.settings.value("game_directory", self.game_path.text(), type=str))
+        self.game_path.textChanged.connect(lambda text: self.settings.setValue("game_directory", text.strip()))
 
         self.browse = QPushButton("Browse...")
         self.browse.clicked.connect(self.choose_folder)
@@ -80,6 +79,20 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.install_button)
         toolbar.addWidget(self.open_button)
         layout.addLayout(toolbar)
+
+        self.blender_edit = QLineEdit()
+        self.blender_edit.setPlaceholderText("Path to Blender 4.5 blender.exe")
+        self.blender_edit.setText(self.settings.value("blender_executable", str(self.blender_path), type=str))
+        self.blender_edit.textChanged.connect(lambda text: self.settings.setValue("blender_executable", text.strip()))
+
+        self.blender_browse = QPushButton("Browse...")
+        self.blender_browse.clicked.connect(self.choose_blender)
+
+        blender_row = QHBoxLayout()
+        blender_row.addWidget(QLabel("Blender 4.5"))
+        blender_row.addWidget(self.blender_edit, 1)
+        blender_row.addWidget(self.blender_browse)
+        layout.addLayout(blender_row)
 
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search operators...")
@@ -119,6 +132,24 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.log)
 
         self.statusBar().showMessage("Choose the game folder and load operators.")
+
+    def choose_blender(self):
+        filename, _ = QFileDialog.getOpenFileName(self, "Choose Blender 4.5", self.blender_edit.text().strip(), "Blender executable (blender.exe)")
+        if filename:
+            self.blender_edit.setText(filename)
+
+    def selected_blender(self):
+        value = self.blender_edit.text().strip()
+        if not value or not Path(value).is_file():
+            self.choose_blender()
+            value = self.blender_edit.text().strip()
+
+        if not value or not Path(value).is_file():
+            self.report_error("Choose an existing Blender 4.5 executable")
+            return None
+
+        self.blender_path = Path(value).resolve()
+        return self.blender_path
 
     def choose_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Choose Rainbow Six Siege Folder", self.game_path.text())
@@ -242,9 +273,10 @@ class MainWindow(QMainWindow):
                 return
             parts.extend((label, uid) for uid in dict.fromkeys(part.model_groups[0]))
 
-        folder = QFileDialog.getExistingDirectory(self, "Choose export destination", str(project / "output"))
+        folder = QFileDialog.getExistingDirectory(self, "Choose export destination", self.settings.value("export_directory", str(project / "output"), type=str),)
         if not folder:
             return
+        self.settings.setValue("export_directory", folder)
 
         folder_name = "".join(
             "_" if character in '<>:"/\\|?*' or ord(character) < 32 else character
@@ -285,7 +317,7 @@ class MainWindow(QMainWindow):
         self.start_export_part()
 
     def set_export_busy(self, busy):
-        for widget in (self.export_button, self.install_button, self.open_button, self.load, self.browse, self.game_path, self.operators, self.search):
+        for widget in (self.export_button, self.install_button, self.open_button, self.load, self.browse, self.game_path, self.operators, self.search, self.blender_edit, self.blender_browse):
             widget.setEnabled(not busy)
 
     def start_export_part(self):
@@ -355,12 +387,9 @@ class MainWindow(QMainWindow):
         if self.worker is not None or self.export_process is not None:
             return
 
-        blender = Path(r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe")
-        if not blender.is_file():
-            filename, _ = QFileDialog.getOpenFileName(self, "Choose Blender 4.5", "", "Blender executable (blender.exe)")
-            if not filename:
-                return
-            blender = Path(filename)
+        blender = self.selected_blender()
+        if blender is None:
+            return
         self.blender_path = blender
 
         script = Path(__file__).resolve().parent / "install_blender_addon.py"
@@ -414,12 +443,9 @@ class MainWindow(QMainWindow):
             self.report_error("Export this operator successfully first.")
             return
 
-        blender = self.blender_path
-        if not blender.is_file():
-            filename, _ = QFileDialog.getOpenFileName(self, "Choose Blender 4.5", "", "Blender executable (blender.exe)")
-            if not filename:
-                return
-            blender = Path(filename)
+        blender = self.selected_blender()
+        if blender is None:
+            return
 
         script = Path(__file__).resolve().parent / "open_operator_blender.py"
         if not script.is_file():
