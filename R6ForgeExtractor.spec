@@ -87,3 +87,13 @@ shutil.copy2(
     project / "docs" / "images" / "desktop-ui.png",
     image_directory / "desktop-ui.png",
 )
+
+shutil.copy2(
+    project / "THIRD_PARTY.md",
+    Path(collection.name) / "THIRD_PARTY.md",
+)
+shutil.copytree(
+    project / "licenses",
+    Path(collection.name) / "licenses",
+    dirs_exist_ok=True,
+)

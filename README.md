@@ -106,3 +106,5 @@ Tests use synthetic data and do not require game assets or Oodle.
 See [LICENSE](LICENSE) for the project license. Bundled dependencies retain their respective licenses.
 
 Rainbow Six Siege and its assets belong to Ubisoft. Game assets and the proprietary Oodle runtime are not included or covered by this project's license.
+
+See [THIRD_PARTY.md](THIRD_PARTY.md) for bundled dependency notices and source locations.
