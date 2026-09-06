@@ -17,7 +17,13 @@ from PySide6.QtWidgets import (
 )
 
 from src.operator_registry import read_operator_registry
-from app_runtime import worker_arguments, external_program_environment
+from app_runtime import (
+    worker_arguments,
+    worker_executable,
+    application_directory,
+    resource_directory,
+    external_program_environment
+)
 
 class RegistryLoader(QThread):
     loaded = Signal(object)
@@ -262,7 +268,7 @@ class MainWindow(QMainWindow):
             self.report_error("Reload operators after changing the game folder.")
             return
 
-        project = Path(__file__).resolve().parent
+        project = application_directory()
         archive = game / "datapc64_merged_bnk_mesh.forge"
         depgraph = game / "datapc64_ondemand.depgraphbin"
         database = project / "output" / "r6-assets.sqlite"
@@ -340,7 +346,7 @@ class MainWindow(QMainWindow):
         self.export_decoder = codecs.getincrementaldecoder("utf-8")("replace")
 
         self.statusBar().showMessage(f"Exporting {number}/{self.export_total}: {label} {uid:016X}")
-        self.export_process.start(sys.executable, worker_arguments(
+        self.export_process.start(worker_executable(), worker_arguments(
             "cli",
             self.export_arguments + [
                     "--uid",
@@ -413,7 +419,7 @@ class MainWindow(QMainWindow):
             return
         self.blender_path = blender
 
-        script = Path(__file__).resolve().parent / "install_blender_addon.py"
+        script = resource_directory() / "install_blender_addon.py"
         if not script.is_file():
             self.report_error(f"Installer not found: {script}")
             return
@@ -431,7 +437,7 @@ class MainWindow(QMainWindow):
         self.log.appendPlainText(f"Checking and installing into {blender}")
         self.statusBar().showMessage("Installing Blender 4.5 add-on...")
         self.export_process.start(
-            sys.executable,
+            worker_executable(),
             worker_arguments("install", [str(blender)]),
         )
 
@@ -492,7 +498,7 @@ class MainWindow(QMainWindow):
         if blender is None:
             return
 
-        script = Path(__file__).resolve().parent / "open_operator_blender.py"
+        script = resource_directory() / "open_operator_blender.py"
         if not script.is_file():
             self.report_error(f"Launch script not found: {script}")
             return
@@ -549,8 +555,8 @@ class MainWindow(QMainWindow):
             self.report_error("Choose a Siege folder containing datapc64.forge")
             return
 
-        project = Path(__file__).resolve().parent
-        script = project / "main.py"
+        project = application_directory()
+        script = resource_directory() / "main.py"
         if not script.is_file():
             self.report_error(f"CLI not found: {script}")
             return
@@ -569,7 +575,7 @@ class MainWindow(QMainWindow):
         self.log.appendPlainText(f"Building/updating asset index from {game}")
         self.statusBar().showMessage("Indexing game archives...")
         self.export_process.start(
-            sys.executable,
+            worker_executable(),
             worker_arguments(
                 "cli",
                 ["index", str(game), "-o", str(self.index_database)]

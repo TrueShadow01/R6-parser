@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import sys
 from pathlib import Path
 
 class OodleUnavailableError(RuntimeError):
@@ -18,7 +19,11 @@ def _candidate_paths() -> list[Path]:
     if configured:
         candidates.append(Path(configured).expanduser())
 
-    project_root = Path(__file__).resolve().parent.parent
+    project_root =(
+        Path(sys.executable).resolve().parent
+        if getattr(sys, "frozen", False)
+        else Path(__file__).resolve().parent.parent
+    )
     candidates.extend(sorted(project_root.glob("oo2core_*_win64.dll"), reverse=True))
 
     return candidates

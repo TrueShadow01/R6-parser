@@ -55,5 +55,22 @@ def external_program_environment():
         set_directory(str(bundle))
 
 def run_external(*args, **kwargs):
+    if sys.platform == "win32":
+        kwargs["creationflags"] = kwargs.get("creationflags", 0) | subprocess.CREATE_NO_WINDOW
     with external_program_environment():
         return subprocess.run(*args, **kwargs)
+
+def application_directory():
+    """Writeable portable-app directory or source project directory"""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+def resource_directory():
+    """Bundled resources live in _internal in the packaged build"""
+    return Path(__file__).resolve().parent
+
+def worker_executable():
+    if getattr(sys, "frozen", False):
+        return str(application_directory() / "R6Worker.exe")
+    return sys.executable
