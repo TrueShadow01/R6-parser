@@ -5,6 +5,7 @@
 import sys
 import codecs
 import re
+import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, Signal, QProcess, QSettings
@@ -39,7 +40,7 @@ class MainWindow(QMainWindow):
         self.worker = None
         self.export_process = None
         self.registry_game_path = None
-        self.complete_exports = {}
+        self.complete_exports = self.load_completed_exports()
         self.blender_path = Path(r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe")
         self.close_requested = False
         self.setWindowTitle("R6 Forge Extractor - Alpha")
@@ -298,6 +299,8 @@ class MainWindow(QMainWindow):
         ]
         self.export_operator_uid = operator.uid
         self.complete_exports.pop(operator.uid, None)
+        self.settings.remove(f"exports/{operator.uid:016X}")
+        self.settings.sync()
         self.export_model_files = tuple(
             destination / f"{uid:016X}.gltf"
             for _, uid, destination in self.export_jobs
@@ -375,6 +378,7 @@ class MainWindow(QMainWindow):
             self.start_export_part()
         else:
             self.complete_exports[self.export_operator_uid] = self.export_model_files
+            self.save_completed_export(self.export_operator_uid, self.export_model_files)
             self.finish_export(True, f"Primary head/body export complete: {self.export_directory}")
 
     def export_process_error(self, error):
@@ -444,6 +448,30 @@ class MainWindow(QMainWindow):
         success = exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0
         message = "R6 add-on installed and enabled in Blender 4.5" if success else f"Blender installation failed (exit {exit_code}), see log"
         self.finish_export(success, message)
+
+    def load_completed_exports(self):
+        exports = {}
+        for key in self.settings.allKeys():
+            if not key.startswith("exports/"):
+                continue
+            try:
+                uid = int(key.removeprefix("exports/"), 16)
+                values = json.loads(self.settings.value(key, "", type=str))
+                if not isinstance(values, list) or not values:
+                    continue
+                if not all(isinstance(value, str) for value in values):
+                    continue
+                paths = tuple(Path(value) for value in values)
+                if not all(path.is_absolute() and path.suffix.lower() == ".gltf" for path in paths):
+                    continue
+                exports[uid] = paths
+            except (ValueError, TypeError):
+                continue
+        return exports
+
+    def save_completed_export(self, uid, models):
+        self.settings.setValue(f"exports/{uid:016X}", json.dumps([str(path.resolve()) for path in models]))
+        self.settings.sync()
 
     def open_in_blender(self):
         if self.worker is not None or self.export_process is not None:
