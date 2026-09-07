@@ -1,7 +1,5 @@
 """Desktop entry point with subprocess worker dispatch"""
 
-# Thanks Nyx and Victor for building this and app_runtime.py - shadow
-
 import sys
 import traceback
 
@@ -29,6 +27,14 @@ def main():
             if len(arguments) != 1:
                 raise ValueError("The install worker requires a Blender path")
             install(arguments[0])
+            return 0
+
+        if worker == "preview":
+            from preview_cache import prepare_preview
+
+            if len(arguments) != 2:
+                raise ValueError("Preview worker requires a game folder and operator UID")
+            prepare_preview(arguments[0], int(arguments[1], 16))
             return 0
 
         raise ValueError(f"Unknown worker: {worker}")

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>R6 Preview</title>
+        <style>
+            html, body {
+                margin: 0;
+                width: 100%;
+                height: 100%;
+                overflow: hidden;
+            }
+
+            body {
+                background: #24282d;
+                color: #ddd;
+                font: 13px sans-serif;
+            }
+            
+            canvas {
+                display: block;
+            }
+
+            #status {
+                position: absolute;
+                left: 12px;
+                bottom: 12px;
+                pointer-events: none;
+            }
+
+            #frame  {
+                position: absolute;
+                left: 12px;
+                top: 12px;
+            }
+        </style>
+        <script type="importmap">
+            {
+                "imports": {
+                    "three": "./vendor/build/three.module.js",
+                    "three/addons/": "./vendor/examples/jsm/"
+                }
+            }
+        </script>
+    </head>
+    <body>
+        <button id="frame">Frame Model</button>
+        <div id="status">Loading preview...</div>
+        <script type="module", src="./preview.js"></script>
+    </body>
+</html>

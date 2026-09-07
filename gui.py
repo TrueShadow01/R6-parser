@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.operator_registry import read_operator_registry
+from preview_widget import PreviewWidget
 from app_runtime import (
     worker_arguments,
     worker_executable,
@@ -79,6 +80,8 @@ class MainWindow(QMainWindow):
         self.install_button.clicked.connect(self.install_blender_addon)
         self.open_button = QPushButton("Open in Blender")
         self.open_button.clicked.connect(self.open_in_blender)
+        self.preview_button = QPushButton("Load Preview")
+        self.preview_button.clicked.connect(self.load_preview)
 
         toolbar = QHBoxLayout()
         toolbar.addWidget(QLabel("Game Folder"))
@@ -89,6 +92,7 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.export_button)
         toolbar.addWidget(self.install_button)
         toolbar.addWidget(self.open_button)
+        toolbar.addWidget(self.preview_button)
         layout.addLayout(toolbar)
 
         self.blender_edit = QLineEdit()
@@ -116,10 +120,8 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.search)
         left_layout.addWidget(self.operators)
 
-        self.preview = QLabel("Select an operator\n\n3D preview will be added next.")
-        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview.setMinimumWidth(300)
-        self.preview.setStyleSheet("background: #24282d; color: #cbd1d8; border-radius: 6px;")
+        self.preview = PreviewWidget(self)
+        QApplication.instance().aboutToQuit.connect(self.preview.shutdown)
 
         self.details = QPlainTextEdit()
         self.details.setReadOnly(True)
@@ -184,6 +186,7 @@ class MainWindow(QMainWindow):
         self.open_button.setEnabled(False)
         self.index_button.setEnabled(False)
         self.statusBar().showMessage("Reading operator registry...")
+        self.preview_button.setEnabled(False)
         self.log.appendPlainText(f"Reading {archive}")
 
         self.worker = RegistryLoader(archive, self)
@@ -217,6 +220,7 @@ class MainWindow(QMainWindow):
         self.install_button.setEnabled(True)
         self.open_button.setEnabled(True)
         self.index_button.setEnabled(True)
+        self.preview_button.setEnabled(True)
 
         if self.close_requested:
             self.close()
@@ -238,7 +242,7 @@ class MainWindow(QMainWindow):
             return
 
         operator = item.data(Qt.ItemDataRole.UserRole)
-        self.preview.setText(f"{operator.name}\n\n3D preview not yet implemented.")
+        self.preview.setText(f"{operator.name}\n\nClick Load Preview.")
 
         lines = [operator.name, f"Operator UID: {operator.uid:016X}"]
         for label, part in (("Head", operator.head), ("Body", operator.body)):
@@ -334,7 +338,7 @@ class MainWindow(QMainWindow):
         for widget in (
             self.export_button, self.install_button, self.open_button,
             self.index_button, self.load, self.browse, self.game_path,
-            self.operators, self.search,
+            self.operators, self.search, self.preview_button,
             self.blender_edit, self.blender_browse
         ):
             widget.setEnabled(not busy)
@@ -598,6 +602,75 @@ class MainWindow(QMainWindow):
             self.finish_export(False, "Indexing finished without a database.")
         else:
             self.finish_export(True, f"Asset index updated: {self.index_database}")
+
+    def load_preview(self):
+        if self.worker is not None or self.export_process is not None:
+            return
+
+        item = self.operators.currentItem()
+        if item is None:
+            self.report_error("Select an operator first")
+            return
+
+        game = Path(self.game_path.text().strip()).resolve()
+        if game != self.registry_game_path:
+            self.report_error("Reload oeprators after changing the game folder")
+            return
+
+        operator = item.data(Qt.ItemDataRole.UserRole)
+        self.preview_output = ""
+        self.export_jobs = []
+        self.export_decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        self.export_process = QProcess(self)
+        self.export_process.setWorkingDirectory(str(application_directory()))
+        self.export_process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        self.export_process.readyReadStandardOutput.connect(self.read_preview_output)
+        self.export_process.finished.connect(self.preview_prepared)
+        self.export_process.errorOccurred.connect(self.export_process_error)
+
+        self.set_export_busy(True)
+        self.statusBar().showMessage(f"Preparing {operator.name} preview...")
+        self.export_process.start(
+            worker_executable(),
+            worker_arguments("preview", [str(game), f"{operator.uid:016X}"])
+        )
+
+    def read_preview_output(self):
+        if self.export_process is None:
+            return
+        text = self.export_decoder.decode(bytes(self.export_process.readAllStandardOutput()))
+        self.preview_output += text
+        if text:
+            self.log.moveCursor(QTextCursor.MoveOperation.End)
+            self.log.insertPlainText(text)
+            self.log.ensureCursorVisible()
+
+    def preview_prepared(self, exit_code, exit_status):
+        if self.export_process is None:
+            return
+
+        self.read_preview_output()
+        self.preview_output += self.export_decoder.decode(b"", final=True)
+        if exit_status != QProcess.ExitStatus.NormalExit or exit_code != 0:
+            self.finish_export(False, "Preview preparation failed, see log")
+            return
+
+        prefixes = ("Preview ready: ", "Using cached preview: ")
+        paths = [
+            line[len(prefix):].strip()
+            for line in self.preview_output.splitlines()
+            for prefix in prefixes
+            if line.startswith(prefix)
+        ]
+        try:
+            if not paths:
+                raise ValueError("Worker did not return a preview manifest")
+            self.preview.load_manifest(paths[-1])
+        except Exception as error:
+            self.finish_export(False, f"Cannot load preview: {error}")
+            return
+
+        self.finish_export(True, "Preview data ready, loading the viewer.")
 
     def closeEvent(self, event):
         if self.worker is not None or self.export_process is not None:
